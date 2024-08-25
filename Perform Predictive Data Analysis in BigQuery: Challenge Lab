@@ -1,0 +1,129 @@
+Task 2. Analyze soccer data
+
+SELECT
+ playerId,
+ (Players.firstName || ' ' || Players.lastName) AS playerName,
+ COUNT(id) AS numPKAtt,
+ SUM(IF(101 IN UNNEST(tags.id), 1, 0)) AS numPKGoals,
+
+ SAFE_DIVIDE(
+   SUM(IF(101 IN UNNEST(tags.id), 1, 0)),
+   COUNT(id)
+   ) AS PKSuccessRate
+
+FROM
+ `soccer.events190` events190
+
+LEFT JOIN
+ `soccer.players` players ON
+   events190.playerId = Players.wyId
+
+WHERE
+ eventName = 'Free Kick' AND
+ subEventName = 'Penalty'
+
+GROUP BY
+ playerId, playerName
+
+HAVING
+ numPkAtt >= 5
+
+ORDER BY
+ PKSuccessRate DESC, numPKAtt DESC
+
+
+
+Task 3. Gain insight by analyzing soccer data
+
+WITH
+Shots AS
+(
+ SELECT
+  *,
+
+  /* 101 is known Tag for 'goals' from goals table */
+  (101 IN UNNEST(tags.id)) AS isGoal,
+
+  /* Translate 0-100 (x,y) coordinate-based distances to absolute positions
+  using "average" field dimensions of 118x71 before combining in 2D dist calc */
+  SQRT(
+    POW(
+      (100 - positions[ORDINAL(1)].x) * 118/100,
+      2) +
+    POW(
+      (50 - positions[ORDINAL(1)].y) * 71/100,
+      2)
+     ) AS shotDistance
+
+ FROM
+  `soccer.events190`
+
+ WHERE
+  /* Includes both "open play" & free kick shots (including penalties) */
+  eventName = 'Shot' OR
+  (eventName = 'Free Kick' AND subEventName IN ('Free kick shot', 'Penalty'))
+)
+
+SELECT
+ ROUND(shotDistance, 0) AS ShotDistRound0,
+
+ COUNT(*) AS numShots,
+ SUM(IF(isGoal, 1, 0)) AS numGoals,
+ AVG(IF(isGoal, 1, 0)) AS goalPct
+
+FROM
+ Shots
+
+WHERE
+ shotDistance < 50
+
+GROUP BY
+ ShotDistRound0
+
+ORDER BY
+ ShotDistRound0
+
+
+
+
+Task 4. Create a regression model using soccer data
+
+
+CREATE MODEL `soccer.xg_logistic_reg_model_190`
+OPTIONS(
+ model_type = 'LOGISTIC_REG',
+ input_label_cols = ['isGoal']
+ ) AS
+
+SELECT
+ events190.subEventName AS shotType,
+
+ /* 101 is known Tag for 'goals' from goals table */
+ (101 IN UNNEST(events190.tags.id)) AS isGoal,
+
+  `soccer.GetShotDistanceToGoal190`(events190.positions[ORDINAL(1)].x,
+   events190.positions[ORDINAL(1)].y) AS shotDistance,
+
+ `soccer.GetShotAngleToGoal190`(events190.positions[ORDINAL(1)].x,
+   events190.positions[ORDINAL(1)].y) AS shotAngle
+
+FROM
+ `soccer.events190` events190
+
+LEFT JOIN
+ `soccer.matches` Matches ON
+   events190.matchId = Matches.wyId
+
+LEFT JOIN
+ `soccer.competitions` Competitions ON
+   Matches.competitionId = Competitions.wyId
+
+WHERE
+ /* Filter out World Cup matches for model fitting purposes */
+ Competitions.name != 'World Cup' AND
+ /* Includes both "open play" & free kick shots (including penalties) */
+ (
+   eventName = 'Shot' OR
+   (eventName = 'Free Kick' AND subEventName IN ('Free kick shot', 'Penalty'))
+ )
+;

@@ -1,3 +1,9 @@
+export event_table=
+export tags_name=
+
+
+
+
 Task 2. Analyze soccer data
 
 SELECT
@@ -12,11 +18,11 @@ SELECT
    ) AS PKSuccessRate
 
 FROM
- `soccer.events190` events190
+ `soccer.$event_table` events190
 
 LEFT JOIN
  `soccer.players` players ON
-   events190.playerId = Players.wyId
+   $event_table.playerId = Players.wyId
 
 WHERE
  eventName = 'Free Kick' AND
@@ -56,7 +62,7 @@ Shots AS
      ) AS shotDistance
 
  FROM
-  `soccer.events190`
+  `soccer.$event_table`
 
  WHERE
   /* Includes both "open play" & free kick shots (including penalties) */
@@ -89,30 +95,30 @@ ORDER BY
 Task 4. Create a regression model using soccer data
 
 
-CREATE MODEL `soccer.xg_logistic_reg_model_190`
+CREATE MODEL `soccer.xg_logistic_reg_model`
 OPTIONS(
  model_type = 'LOGISTIC_REG',
  input_label_cols = ['isGoal']
  ) AS
 
 SELECT
- events190.subEventName AS shotType,
+ $event_table.subEventName AS shotType,
 
  /* 101 is known Tag for 'goals' from goals table */
  (101 IN UNNEST(events190.tags.id)) AS isGoal,
 
-  `soccer.GetShotDistanceToGoal190`(events190.positions[ORDINAL(1)].x,
-   events190.positions[ORDINAL(1)].y) AS shotDistance,
+  `soccer.GetShotDistanceToGoal190`($event_table.positions[ORDINAL(1)].x,
+   $event_table.positions[ORDINAL(1)].y) AS shotDistance,
 
- `soccer.GetShotAngleToGoal190`(events190.positions[ORDINAL(1)].x,
-   events190.positions[ORDINAL(1)].y) AS shotAngle
+ `soccer.GetShotAngleToGoal190`($event_table.positions[ORDINAL(1)].x,
+   $event_table.positions[ORDINAL(1)].y) AS shotAngle
 
 FROM
- `soccer.events190` events190
+ `soccer.$event_table` events190
 
 LEFT JOIN
  `soccer.matches` Matches ON
-   events190.matchId = Matches.wyId
+   $event_table.matchId = Matches.wyId
 
 LEFT JOIN
  `soccer.competitions` Competitions ON

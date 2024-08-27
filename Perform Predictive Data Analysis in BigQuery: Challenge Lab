@@ -127,3 +127,47 @@ WHERE
    (eventName = 'Free Kick' AND subEventName IN ('Free kick shot', 'Penalty'))
  )
 ;
+
+
+Task 5. Make predictions from new data with the BigQuery model
+
+SELECT
+ *
+
+FROM
+ ML.PREDICT(
+   MODEL `soccer.xg_logistic_reg_model_283`,
+   (
+     SELECT
+       events283.subEventName AS shotType,
+
+       /* 101 is known Tag for 'goals' from goals table */
+       (101 IN UNNEST(events283.tags.id)) AS isGoal,
+
+       `soccer.GetShotDistanceToGoal283`(events283.positions[ORDINAL(1)].x,
+           events283.positions[ORDINAL(1)].y) AS shotDistance,
+
+       `soccer.GetShotAngleToGoal283`(events283.positions[ORDINAL(1)].x,
+           events283.positions[ORDINAL(1)].y) AS shotAngle
+
+     FROM
+       `soccer.events283` events283
+
+     LEFT JOIN
+       `soccer.matches` Matches ON
+           events283.matchId = Matches.wyId
+
+     LEFT JOIN
+       `soccer.competitions` Competitions ON
+           Matches.competitionId = Competitions.wyId
+
+     WHERE
+       /* Look only at World Cup matches for model predictions */
+       Competitions.name = 'World Cup' AND
+       /* Includes both "open play" & free kick shots (including penalties) */
+       (
+           eventName = 'Shot' OR
+           (eventName = 'Free Kick' AND subEventName IN ('Free kick shot', 'Penalty'))
+       )
+   )
+ )
